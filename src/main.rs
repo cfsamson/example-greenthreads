@@ -70,8 +70,7 @@ impl Runtime {
     if let Some(mut pos) = self.threads.iter()
       .skip(old)
       .chain(self.threads.iter().take(old))
-      .position(|t| t.state == State::Ready)
-    {
+      .position(|t| t.state == State::Ready) {
       pos += old;
       if pos >= self.threads.len() {
         pos -= self.threads.len();
