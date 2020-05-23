@@ -103,7 +103,7 @@ impl Runtime {
     /// If no thread is `Ready` we're all done. This is an extremely simple sceduler using only a round-robin algorithm.
     ///
     /// If we find a thread that's ready to be run we change the state of the current thread from `Running` to `Ready`.
-    /// Then we call swictch wich will save the current context (the old context) and load the new context
+    /// Then we call switch which will save the current context (the old context) and load the new context
     /// into the CPU which then resumes based on the context it was just passed.
     fn t_yield(&mut self) -> bool {
         let mut pos = self.current;
@@ -284,7 +284,7 @@ fn main() {
             yield_thread();
         }
 
-        println!("THREAD 1 FINISHED");
+        println!("THREAD 2 FINISHED");
     });
 
     runtime.run();
