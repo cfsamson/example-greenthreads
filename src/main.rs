@@ -1,6 +1,4 @@
-#![feature(asm)]
-#![feature(naked_functions)]
-use std::ptr;
+#![feature(llvm_asm, naked_functions)]
 
 // In our simple example we set most constraints here.
 const DEFAULT_STACK_SIZE: usize = 1024 * 1024 * 2;
@@ -173,14 +171,20 @@ impl Runtime {
             // a lower one will be a valid address (given that we actually allocated)
             // enough space to actually get an aligned pointer in the first place).
             let s_ptr = (s_ptr as usize & ! 15) as *mut u8;
-            ptr::write(s_ptr.offset(-24) as *mut u64, guard as u64);
-            ptr::write(s_ptr.offset(-32) as *mut u64, f as u64);
+            std::ptr::write(s_ptr.offset(-16) as *mut u64, guard as u64);
+            std::ptr::write(s_ptr.offset(-24) as *mut u64, skip as u64);
+            std::ptr::write(s_ptr.offset(-32) as *mut u64, f as u64);
             available.ctx.rsp = s_ptr.offset(-32) as u64;
         }
 
         available.state = State::Ready;
     }
 }
+
+/// This is an empty function which compiles to simply a `retq` instruction. `retq` will pop the next value off the
+/// stack and jump to the location. In our case that will be the `guard` function.
+#[naked]
+fn skip() { }
 
 /// This is our guard function that we place on top of the stack. All this function does is set the
 /// state of our current thread and then `yield` which will then schedule a new thread to be run.
@@ -236,7 +240,7 @@ pub fn yield_thread() {
 #[naked]
 #[inline(never)]
 unsafe fn switch(old: *mut ThreadContext, new: *const ThreadContext) {
-    asm!("
+    llvm_asm!("
         mov     %rsp, 0x00($0)
         mov     %r15, 0x08($0)
         mov     %r14, 0x10($0)
