@@ -1,6 +1,4 @@
-#![feature(llvm_asm)]
-#![feature(naked_functions)]
-use std::ptr;
+#![feature(llvm_asm, naked_functions)]
 
 const DEFAULT_STACK_SIZE: usize = 1024 * 1024 * 2;
 const MAX_THREADS: usize = 4;
@@ -126,9 +124,9 @@ impl Runtime {
         let size = available.stack.len();
         let s_ptr = available.stack.as_mut_ptr();
         unsafe {
-            ptr::write(s_ptr.offset((size - 16) as isize) as *mut u64, guard as u64);
-            ptr::write(s_ptr.offset((size - 24) as isize) as *mut u64, skip as u64);
-            ptr::write(s_ptr.offset((size - 32) as isize) as *mut u64, f as u64);
+            std::ptr::write(s_ptr.offset((size - 16) as isize) as *mut u64, guard as u64);
+            std::ptr::write(s_ptr.offset((size - 24) as isize) as *mut u64, skip as u64);
+            std::ptr::write(s_ptr.offset((size - 32) as isize) as *mut u64, f as u64);
             available.ctx.rsp = s_ptr.offset((size - 32) as isize) as u64;
         }
         available.state = State::Ready;
