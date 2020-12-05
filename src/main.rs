@@ -108,7 +108,22 @@ impl Runtime {
         self.current = pos;
 
         unsafe {
-            switch(&mut self.threads[old_pos].ctx, &self.threads[pos].ctx);
+            let old: *mut ThreadContext = &mut self.threads[old_pos].ctx;
+            let new: *const ThreadContext = &self.threads[pos].ctx;
+
+            if cfg!(not(target_os = "windows")) {
+                llvm_asm!(
+                    "mov $0, %rdi
+                     mov $1, %rsi" ::"r"(old), "r"(new)
+                );
+            } else {
+                llvm_asm!(
+                    "mov $0, %rcx
+                     mov $1, %rdx" ::"r"(old), "r"(new)
+                );
+            }
+
+            switch();
         }
 
         // preventing compiler optimizing our code away on windows. Will never be reached anyway.
@@ -136,7 +151,7 @@ impl Runtime {
 }
 
 #[naked]
-fn skip() { }
+fn skip() {}
 
 fn guard() {
     unsafe {
@@ -155,29 +170,27 @@ pub fn yield_thread() {
 #[cfg(not(target_os = "windows"))]
 #[naked]
 #[inline(never)]
-unsafe fn switch(old: *mut ThreadContext, new: *const ThreadContext) {
-    llvm_asm!("
-        mov     %rsp, 0x00($0)
-        mov     %r15, 0x08($0)
-        mov     %r14, 0x10($0)
-        mov     %r13, 0x18($0)
-        mov     %r12, 0x20($0)
-        mov     %rbx, 0x28($0)
-        mov     %rbp, 0x30($0)
-   
-        mov     0x00($1), %rsp
-        mov     0x08($1), %r15
-        mov     0x10($1), %r14
-        mov     0x18($1), %r13
-        mov     0x20($1), %r12
-        mov     0x28($1), %rbx
-        mov     0x30($1), %rbp
+#[no_mangle]
+unsafe fn switch() {
+    llvm_asm!(
+        "
+        mov     %rsp, 0x00(%rdi)
+        mov     %r15, 0x08(%rdi)
+        mov     %r14, 0x10(%rdi)
+        mov     %r13, 0x18(%rdi)
+        mov     %r12, 0x20(%rdi)
+        mov     %rbx, 0x28(%rdi)
+        mov     %rbp, 0x30(%rdi)
+
+        mov     0x00(%rsi), %rsp
+        mov     0x08(%rsi), %r15
+        mov     0x10(%rsi), %r14
+        mov     0x18(%rsi), %r13
+        mov     0x20(%rsi), %r12
+        mov     0x28(%rsi), %rbx
+        mov     0x30(%rsi), %rbp
         ret
         "
-    :
-    :"r"(old), "r"(new)
-    :
-    : "volatile", "alignstack"
     );
 }
 
@@ -261,63 +274,60 @@ impl Runtime {
 // reference: https://probablydance.com/2013/02/20/handmade-coroutines-for-windows/
 // Contents of TIB on Windows: https://en.wikipedia.org/wiki/Win32_Thread_Information_Block
 #[cfg(target_os = "windows")]
-#[naked]
 #[inline(never)]
-unsafe fn switch(old: *mut ThreadContext, new: *const ThreadContext) {
-    llvm_asm!("
-        movaps      %xmm6, 0x00($0)
-        movaps      %xmm7, 0x10($0)
-        movaps      %xmm8, 0x20($0)
-        movaps      %xmm9, 0x30($0)
-        movaps      %xmm10, 0x40($0)
-        movaps      %xmm11, 0x50($0)
-        movaps      %xmm12, 0x60($0)
-        movaps      %xmm13, 0x70($0)
-        movaps      %xmm14, 0x80($0)
-        movaps      %xmm15, 0x90($0)
-        mov         %rsp, 0xa0($0)
-        mov         %r15, 0xa8($0)
-        mov         %r14, 0xb0($0)
-        mov         %r13, 0xb8($0)
-        mov         %r12, 0xc0($0)
-        mov         %rbx, 0xc8($0)
-        mov         %rbp, 0xd0($0)
-        mov         %rdi, 0xd8($0)
-        mov         %rsi, 0xe0($0)
-        mov         %gs:0x08, %rax    
-        mov         %rax, 0xe8($0)  
-        mov         %gs:0x10, %rax    
-        mov         %rax, 0xf0($0)  
+#[no_mangle]
+unsafe fn switch() {
+    llvm_asm!(
+        "
+        movaps      %xmm6, 0x00(%rcx)
+        movaps      %xmm7, 0x10(%rcx)
+        movaps      %xmm8, 0x20(%rcx)
+        movaps      %xmm9, 0x30(%rcx)
+        movaps      %xmm10, 0x40(%rcx)
+        movaps      %xmm11, 0x50(%rcx)
+        movaps      %xmm12, 0x60(%rcx)
+        movaps      %xmm13, 0x70(%rcx)
+        movaps      %xmm14, 0x80(%rcx)
+        movaps      %xmm15, 0x90(%rcx)
+        mov         %rsp, 0xa0(%rcx)
+        mov         %r15, 0xa8(%rcx)
+        mov         %r14, 0xb0(%rcx)
+        mov         %r13, 0xb8(%rcx)
+        mov         %r12, 0xc0(%rcx)
+        mov         %rbx, 0xc8(%rcx)
+        mov         %rbp, 0xd0(%rcx)
+        mov         %rdi, 0xd8(%rcx)
+        mov         %rsi, 0xe0(%rcx)
+        mov         %gs:0x08, %rax
+        mov         %rax, 0xe8(%rcx)
+        mov         %gs:0x10, %rax
+        mov         %rax, 0xf0(%rcx)
 
-        movaps      0x00($1), %xmm6
-        movaps      0x10($1), %xmm7
-        movaps      0x20($1), %xmm8
-        movaps      0x30($1), %xmm9
-        movaps      0x40($1), %xmm10
-        movaps      0x50($1), %xmm11
-        movaps      0x60($1), %xmm12
-        movaps      0x70($1), %xmm13
-        movaps      0x80($1), %xmm14
-        movaps      0x90($1), %xmm15
-        mov         0xa0($1), %rsp
-        mov         0xa8($1), %r15
-        mov         0xb0($1), %r14
-        mov         0xb8($1), %r13
-        mov         0xc0($1), %r12
-        mov         0xc8($1), %rbx
-        mov         0xd0($1), %rbp
-        mov         0xd8($1), %rdi
-        mov         0xe0($1), %rsi
-        mov         0xe8($1), %rax
-        mov         %rax, %gs:0x08  
-        mov         0xf0($1), %rax 
-        mov         %rax, %gs:0x10  
+        movaps      0x00(%rdx), %xmm6
+        movaps      0x10(%rdx), %xmm7
+        movaps      0x20(%rdx), %xmm8
+        movaps      0x30(%rdx), %xmm9
+        movaps      0x40(%rdx), %xmm10
+        movaps      0x50(%rdx), %xmm11
+        movaps      0x60(%rdx), %xmm12
+        movaps      0x70(%rdx), %xmm13
+        movaps      0x80(%rdx), %xmm14
+        movaps      0x90(%rdx), %xmm15
+        mov         0xa0(%rdx), %rsp
+        mov         0xa8(%rdx), %r15
+        mov         0xb0(%rdx), %r14
+        mov         0xb8(%rdx), %r13
+        mov         0xc0(%rdx), %r12
+        mov         0xc8(%rdx), %rbx
+        mov         0xd0(%rdx), %rbp
+        mov         0xd8(%rdx), %rdi
+        mov         0xe0(%rdx), %rsi
+        mov         0xe8(%rdx), %rax
+        mov         %rax, %gs:0x08
+        mov         0xf0(%rdx), %rax
+        mov         %rax, %gs:0x10
 
         ret
         "
-    :
-    :"r"(old), "r"(new)
-    :
-    : "volatile", "alignstack"
     );
 }
