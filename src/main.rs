@@ -258,8 +258,9 @@ impl Runtime {
 
         // see: https://docs.microsoft.com/en-us/cpp/build/stack-usage?view=vs-2019#stack-allocation
         unsafe {
-            ptr::write(s_ptr.offset((size - 24) as isize) as *mut u64, guard as u64);
-            ptr::write(s_ptr.offset((size - 32) as isize) as *mut u64, f as u64);
+            std::ptr::write(s_ptr.offset((size - 16) as isize) as *mut u64, guard as u64);
+            std::ptr::write(s_ptr.offset((size - 24) as isize) as *mut u64, skip as u64);
+            std::ptr::write(s_ptr.offset((size - 32) as isize) as *mut u64, f as u64);
             available.ctx.rsp = s_ptr.offset((size - 32) as isize) as u64;
             available.ctx.stack_start = s_ptr.offset(size as isize) as u64;
         }
